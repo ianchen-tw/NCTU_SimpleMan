@@ -86,14 +86,19 @@ class query:
     data={'acysem':'1061','ftype':default.category['研究所課程'],
         'fcategory':'2*','fcollege':'A','flang':'zh-tw'}
     response = requests.post(url, params=para, data=data).json()
-    self._department = { li['unit_name']:li['unit_id'] for li in response}
+    self._department = {
+        li['unit_name']:{
+          'degree':li['unit_id'][:1],
+          'dep_id':li['unit_id'][1:]
+        } for li in response
+      }
     print(self._department)
     return
     
 
 def main():
   q = query({"m_acy":106, "m_sem":2, "m_degree":0,"m_dep_id":'U9' })
-  q.fetch_department()
+  q.start()
   #pprint(q.fetch_acysem_list())
 
 if __name__ == "__main__":
