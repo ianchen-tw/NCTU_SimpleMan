@@ -1,14 +1,14 @@
 import requests
 from pprint import pprint
 
-import default
 url ='https://timetable.nctu.edu.tw/'
+
 
 
 class query:
   _acysem = None
   _default_lang = "zh-tw"
-  def __init__(self,kwargs):
+  def __init__(self,acy_sem="", dep=""):
     '''
     acy : academic year
     sem : semester
@@ -21,8 +21,8 @@ class query:
     self._category = None
     self._college = None
     self._department = None
-
     self.form=dict()
+
     form_keys= [
       "m_acy",    "m_sem",       "m_degree",
       "m_dep_id", "m_group",     "m_grade",
@@ -32,30 +32,36 @@ class query:
     ]
     for i in form_keys:
       self.form[i] = "**"
-    if len(kwargs) != 0:
-      for k,v in kwargs.items():
-        if k in self.form.keys():
-          self.form[k] = v
- 
+    
+    if len(acy_sem) != 0:
+      print(f'acysem: {acy_sem}')
+      self.form['m_acy'] = str(acy_sem[:-1])
+      self.form['m_sem'] = str(acy_sem[-1])
+    
+    if len(dep)!= 0:
+      self.form['m_degree'] = str(dep[0])
+      self.form['m_dep_id'] = str(dep[1:])
+      
+
 
   def start(self):
     para={ "r":"main/get_cos_list"}
     return requests.post(url,params=para,data=self.form).json()
 
   def fetch_acysem(self):
+    '''回傳一系列可供查詢的acysem
+    ex. [ '1071', '106X', '1062', '1061', ...]
+
+    acy(學年);
+    sem(學期)->(1:上,2:下,X:暑)
+    '''
     para={ "r":"main/get_acysem"}
     response = requests.post(url,params=para).json()
-    out = dict()
-    # gather semesters by academic year
+
+    result = []
     for li in response:
-      v = li['T']
-      year = v[:-1]
-      if year in out:
-        out[year].append(v[-1])
-      else:
-        out[year] = list(v[-1])
-    _acysem = out
-    return response
+      result.append(li['T'])
+    return result
 
   def fetch_category(self, acy_sem,ftype):
     '''Depend on acysem
@@ -75,8 +81,23 @@ class query:
     para={ "r":"main/get_category"}
     data={'ftype':ftype, 'flang':'zh-tw', 'acysem':acy_sem  }
     response = requests.post(url,params=para, data=data).json()
-    self._category = { v:k for k,v in response.items()}
-    return response
+    if response != []:
+      #大部分情況
+      if type(response) is dict: 
+        result = list( response.keys())
+        return result
+
+      # type 屬於 其他課程,學分學程,跨領域學程,教育學程的情況下
+      # 後端會回傳一堆重複的物件(wtf???)，必須要自行合併
+      elif type(response) is list:
+        cat_dict = dict()
+        for obj in  response:
+          if cat_dict.get(obj['unit_id']) is None:
+            cat_dict[obj['unit_id']] = obj['unit_name']
+
+        return list( cat_dict.keys())
+
+    return []
 
   def fetch_college(self, ftype, fcategory):
     '''Depend on type,category
@@ -85,8 +106,12 @@ class query:
     data={'ftype':ftype, 'flang':'zh-tw',
         'fcategory':fcategory}
     response = requests.post(url, params=para, data=data).json()
-    self._college = { li['CollegeNo']:li['CollegeName'] for li in response}
-    return response
+    #使用dict而不是list只是為了方便除蟲
+    result_dict = {}
+    for data in response:
+      result_dict[data['CollegeNo']] = data['CollegeName']
+
+    return list(result_dict.keys())
 
   def fetch_department(self,acysem,ftype,fcategoery,fcollege):
     '''acysem,type,cat,college
@@ -97,64 +122,78 @@ class query:
     data={'acysem':acysem,'ftype':ftype,
         'fcategory':fcategoery,'fcollege':fcollege,'flang':'zh-tw'}
     response = requests.post(url, params=para, data=data).json()
-    self._department = {
-        li['unit_name']:{
-          'degree':li['unit_id'][:1],
-          'dep_id':li['unit_id'][1:]
-        } for li in response
-      }
-    #print(self._department)
-    return response
+
+    if response != []:
+      #大部分情況
+      if type(response) is dict: 
+        result = list( response.keys())
+        return result
+
+      # type 屬於 其他課程,學分學程,跨領域學程,教育學程的情況下
+      # 後端會回傳一堆重複的物件(wtf???)，必須要自行合併
+      elif type(response) is list:
+        cat_dict = dict()
+        for obj in  response:
+          if cat_dict.get(obj['unit_id']) is None:
+            cat_dict[obj['unit_id']] = obj['unit_name']
+        return list( cat_dict.keys())
+
+    return []
     
 
 def main():
-  #q = query({"m_acy":106, "m_sem":2, "m_degree":0,"m_dep_id":'U9' })
-  #q.start()
-  #pprint(q.fetch_acysem_list())
+
   q = query({})
-  acysem = q.fetch_acysem();
-  print(f'acysem:#{acysem}')
+
+  acysem = q.fetch_acysem()
+  # acysem:['1071', '106X', '1062',...]
+  print(f'acysem:{acysem}')
   print('=='*20)
 
 
   valid_type_list = {
-    "學士班課程":"3",
-    "研究所課程":"2",
-    "學士班共同課程":"0",
-    "其他課程":"7",
-    "學分學程":"72",
-    "跨領域學程":"9",
-    "教育學程":"8",
+    "3": "學士班課程",
+    "2":"研究所課程",
+    "0":"學士班共同課程",
+    "7":"其他課程",
+    "72":"學分學程",
+    "9":"跨領域學程",
+    "8":"教育學程",
   }
-  ftype = "3"
-  facysem = "1071"
-  category = q.fetch_category(facysem, ftype)
-  print(f'category:#{category}')
+  ftype = list(valid_type_list.keys())[0]
+  #4
+  facysem = acysem[0]
+
+  categories = q.fetch_category(facysem, ftype)
+  print(f'category:{categories}')
   print('=='*20)
   
 
-  # cat ='3*'  一般學士班
-  fcategory = "3*"
-  college = q.fetch_college(ftype,fcategory)
-  print(f'college #{college}')
-  print('=='*20)
+  
+  # fetch college
+  if len(categories) != 0:
+    fcategory = categories[0]
+  else:
+    fcategory = ""
+  college = []
+  if ftype in ["3","2"]:
+    college = q.fetch_college(ftype,fcategory)
+    print(f'college {college}')
+    print('=='*20)
 
-  fcollege = "C"
-  dep = q.fetch_department("1071",ftype,fcategory,fcollege)
-  print(dep)
+  if len(college) != 0:
+    fcollege = college[0]
+  else:
+    fcollege = ""
+
+  dep = q.fetch_department(facysem,ftype,fcategory,fcollege)
+  print(f'department:{dep}')
   print('=='*20)
 
   f_dep = "317" #還不是正式可以使用的欄位
-  fdegree = f_dep[0]
-  fdep_id = f_dep[1:]
-
-
-
-  #詢問完所有欄位後就可以發出請求
-  {"m_acy":106, "m_sem":2, "m_degree":0,"m_dep_id":'U9' }
-  q = query({"m_acy":facysem[:-1], "m_sem":facysem[-1], "m_degree":fdegree,"m_dep_id":fdep_id })
-  result = q.start()
-  print(f"result:#{result}")
+  #q = query(acy_sem=facysem, dep=f_dep)
+  #result = q.start()
+  #print(f"result:#{result}")
 
 if __name__ == "__main__":
   main()
