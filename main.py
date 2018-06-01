@@ -48,12 +48,59 @@ class query:
     para={ "r":"main/get_cos_list"}
     #print(f'url:{url}, para:{para}, data:{self.form}')
 
+    dep_results= []
+    course_dict = {}#紀錄所有出現過的課程(使用{學年}_{當期課號}當作標籤 )e.g. "1071_1609"
     # parse result into list of course infomations
-    cos_list = requests.post(url,params=para,data=self.form).json()
-    if cos_list == []:
+    response = requests.post(url,params=para,data=self.form).json()
+    for k,v in response.items():
+      # 後端回傳的是以開課單位為鍵值的課程列表
+      dep_results.append( {k:v} )
+    if dep_results == []:
       print(f'coslist is empty')
       return []
-    return requests.post(url,params=para,data=self.form).json()
+    
+    #print(f"len :{len(dep_results)}")
+
+    def register_courses(course_list):
+      '''從原始資料中擷取出有用的課程資訊並註冊到 course_dict
+      '''
+      nonlocal course_dict
+      course_list = list(course_list.items())
+
+      for course_id, content in course_list:
+        #只有發現課程沒有紀錄的情況下才需要紀錄
+        if course_dict.get(course_id) is None:
+          course_dict[course_id] = content
+        #else:
+        #  dc = course['cos_id']
+        #  print(f'重複課程{ dc}')
+
+    # 註冊課程
+    for c in dep_results:
+      c = list(c.values())[0]
+      register_courses( c['1'])
+      
+      # 相關課程列表，不一定會出現
+      if c.get('2')!= None:
+        register_courses( c['2'])
+
+      # 對已註冊課程補充額外欄位資訊
+      # 通識類別  brief
+      # brief 欄位會列出所有出現過課程的brief欄位
+      for cid, content in c['brief'].items():
+        # brief有時候會是空白，不過沒差
+        brief = list(content.values())[0]['brief']
+        course_dict[cid]['brief'] = brief
+
+      # 進階通認識類別 (個別學院承認可以當作通識的課程)(N+沒有)
+
+      # 授課語言代碼(N+沒有)
+      for cid, content in c['language'].items():
+        language = content['授課語言代碼']
+        course_dict[cid]['language'] = language
+    
+    result = list(course_dict.values())
+    return result
 
   @staticmethod
   def fetch_acysem():
@@ -152,7 +199,6 @@ class query:
     return []
     
 
-
 def dfs_courses(acysem):
   '''回傳需要query所有系所資訊的query string list
     (建立於特定學期)
@@ -197,9 +243,14 @@ def dfs_courses(acysem):
   return result
 
 def main():
-  q = query(acy_sem="1071", dep="5C1")
+
+  # "343" -> 一般學士班:外文系
+  # "0U5" -> 學士班共同課程:校共同:通識  (回傳的是多個學院開的課)
+  q = query(acy_sem="1071", dep="343")
   result = q.start()
-  print(f"result:{result}")
+  for i in result:
+    pprint(i)
+  #print(f"result:{result}")
   exit(0)
 
 
