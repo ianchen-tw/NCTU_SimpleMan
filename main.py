@@ -1,6 +1,8 @@
 import requests
 from concurrent.futures import ThreadPoolExecutor
+import json
 from pprint import pprint
+import sys
 
 url ='https://timetable.nctu.edu.tw/'
 
@@ -104,8 +106,7 @@ class form_builder:
         return list( cat_dict.keys())
 
     return []
-    
-  
+      
 def fetch_course_list(acy_sem="", dep=""):
   form=dict()
   form_keys= [
@@ -156,7 +157,23 @@ def fetch_course_list(acy_sem="", dep=""):
     for course_id, content in course_list:
       #只有發現課程沒有紀錄的情況下才需要紀錄
       if course_dict.get(course_id) is None:
+        # 型別轉換
+        c = content
+        c['cos_credit'] = float(c['cos_credit'])
+        c['cos_hours'] = float(c['cos_hours'])
+        c['num_limit'] = int(c['num_limit'])
+        c['reg_num'] = int(c['reg_num'])
+        c["unique_id"] = f"{c['acy']}-{c['sem']}-{c['cos_id']}"
+        c.pop('acy')
+        c.pop('sem')
+        c.pop('cos_id')
+
+        for i in ['memo','TURL','brief']:
+          c[i] = c[i].strip()
+
         course_dict[course_id] = content
+        
+        
       #else:
       #  dc = course['cos_id']
       #  print(f'重複課程{ dc}')
@@ -189,6 +206,7 @@ def fetch_course_list(acy_sem="", dep=""):
       language = content['授課語言代碼']
       course_dict[cid]['language'] = language
   
+    
   #result = list(course_dict.values())
   result = course_dict
   return result
@@ -240,31 +258,57 @@ def dfs_courses(acysem):
               'facysem': facysem,
               'fdep':fdep
             })
+  
+  #在課程時間表沒辦法直接拿到的欄位
+  additional_dep = {
+    '0U5':'通識教育中心', 
+    '0U4':'華語中心',
+    '0U7':'師資培育中心',
+    '0U9':'體育室',
+    '0UH':'教務處',
+    '0UL':'服務學習中心',
+    '0UF':'衛保組(健康與護理)',
+    '0UD':'物理教學小組',
+    '0UV':'共同教育委員會',
+    '0UJ':'寫作中心',
+    '8FI':'外文系:華語教學學分學程',
+    '340':'百川學士學位學程',
+    '0UA':'軍訓室',
+    '0UB':'資訊技術服務中心',
+    '0U3':'藝文中心',
+    '2UH':'教務處',
+    '0UE':'微積分教學小組',
+    '0UN':'課務組',
+    '0UP':'台中一中科學班', 
+    '0UC':'圖書館', 
+    '0U6':'語言教學與研究中心',
+    '8BN':'音樂學分學程',
+    
+  }
+  for i in additional_dep.keys():
+    result.append({'facysem': facysem,'fdep':i})
   return result
 
 def main():
-
+  q = form_builder()
+  acysem = q.fetch_acysem()
+  if not( len(sys.argv)>=2 and sys.argv[1] in acysem):
+    print( "Please provide a valid semester code")
+    print(f" suggested semesters:{acysem[:5]}")
+    print( " Example:")
+    print(f"  python3.6 main.py {acysem[0]}")
+    exit(1)
+    
   # "343" -> 一般學士班:外文系
   # "353" -> 一般學士班:人社系
-
   # "0U9" -> 學士班共同課程:體育 
   # "0U5" -> 學士班共同課程:校共同:通識  (回傳的是多個學院開的課)
+  #result = fetch_course_list(acy_sem="1062", dep="2XT")
+  #pprint(result)
+  #exit(0)
 
-
-  #result = fetch_course_list(acy_sem="1071", dep="343")
-  #print(result)
-
-
-
-
-  q = form_builder()
-
-  acysem = q.fetch_acysem()
-  # acysem:['1071', '106X', '1062',...]
-  print(f'acysem:{acysem}')
-  print('=='*20)
-  qs = dfs_courses("1071")  
-
+  facysem=sys.argv[1]
+  qs = dfs_courses(facysem)  
 
   courses = dict()
   arg_tuples = [ (d['facysem'], d['fdep']) for d in qs ]
@@ -276,10 +320,9 @@ def main():
   print(f'total courses:{len(courses)}')
 
 
+  with open(f'./course/crawl{facysem}.json', "w") as f:
+    json.dump( list(courses.values()),f,ensure_ascii=False, indent=2) 
 
-  #qs.sort(key= lambda x:x['fdep'])
-  #for i in qs:
-  #  print(i)
 
 if __name__ == "__main__":
   main()
