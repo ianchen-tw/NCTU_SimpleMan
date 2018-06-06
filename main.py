@@ -136,7 +136,7 @@ def fetch_course_list(acy_sem="", dep=""):
   dep_results= []
   course_dict = {}#紀錄所有出現過的課程(使用{學年}_{當期課號}當作標籤 )e.g. "1071_1609"
   # parse result into list of course infomations
-  response = requests.post(url,params=para,data=form).json()
+  response = requests.post(url,params=para,data=form ).json()
   if response == []:
     return []
   for k,v in response.items():
@@ -214,7 +214,7 @@ def fetch_course_list(acy_sem="", dep=""):
 def fetch_mapper(arg_tuple):
   tu = arg_tuple
   result = fetch_course_list(acy_sem=tu[0], dep=tu[1])
-  #print('returned!')
+  print('returned!')
   return result
 
 def dfs_courses(acysem):
@@ -312,7 +312,7 @@ def main():
 
   courses = dict()
   arg_tuples = [ (d['facysem'], d['fdep']) for d in qs ]
-  with ThreadPoolExecutor(max_workers=100) as executor:
+  with ThreadPoolExecutor(max_workers=7) as executor:
     results = executor.map(fetch_mapper, arg_tuples )
     for r in results:
       courses.update(r)
