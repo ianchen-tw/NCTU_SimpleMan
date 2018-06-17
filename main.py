@@ -1,8 +1,9 @@
 import requests
-from concurrent.futures import ThreadPoolExecutor
+import os
 import json
-from pprint import pprint
 import sys
+from pprint import pprint
+from concurrent.futures import ThreadPoolExecutor
 
 url ='https://timetable.nctu.edu.tw/'
 
@@ -319,6 +320,9 @@ def main():
 
   print(f'total courses:{len(courses)}')
 
+
+  if not os.path.exists("./course"):
+      os.makedirs("./course")
 
   with open(f'./course/crawl{facysem}.json', "w") as f:
     json.dump( list(courses.values()),f,ensure_ascii=False, indent=2) 
